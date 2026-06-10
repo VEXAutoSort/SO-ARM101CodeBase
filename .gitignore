@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# LeRobot outputs
+outputs/
+wandb/
+*.ckpt
+*.safetensors
+
+# Datasets (these live on the HF Hub, not in git)
+data/
+datasets/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
