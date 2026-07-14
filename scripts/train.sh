@@ -13,6 +13,6 @@ lerobot-train \
   --policy.type=act \
   --output_dir="outputs/train/${JOB_NAME}" \
   --job_name="${JOB_NAME}" \
-  --policy.device=mps \
+  --policy.device="${DEVICE}" \
   --policy.repo_id="${HF_USER}/${JOB_NAME}" \
   --wandb.enable=false

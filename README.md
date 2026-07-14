@@ -1,4 +1,4 @@
-# AutoSort 🤖🔩
+# AutoSort
 
 Autonomous robotic arm system that sorts small VEX hardware (screws, nuts, standoffs, spacers...) into bins, so no human ever has to again.
 
@@ -6,58 +6,68 @@ Autonomous robotic arm system that sorts small VEX hardware (screws, nuts, stand
 
 **Stack:** SO-ARM101 (leader + follower) · [LeRobot](https://github.com/huggingface/lerobot) · ACT policy · imitation learning from teleop demos
 
+## Links
+
+- **Website:** [vexautosort.com](https://vexautosort.com)
+- **Research journal:** [Google Doc](https://docs.google.com/document/d/1OEXihUL1jX0aLQL2xZLL2lIpXaZqPyQmFPhNkSJQVyw/edit)
+- **Hugging Face org:** [VEXAutoSort](https://huggingface.co/VEXAutoSort) — datasets and trained policies
+
 ---
 
 ## Repo layout
 
 ```
 autosort/
+├── requirements.txt         # Python dependencies (lerobot[feetech] + hf hub cli)
 ├── configs/
-│   └── setup.env          # YOUR machine's ports, arm IDs, camera indices (edit this first!)
+│   └── setup.env.example    # Template — copy to setup.env, fill in YOUR ports/cameras
 ├── scripts/
-│   ├── find_ports.sh      # Find USB ports for the arms
-│   ├── teleop.sh          # Teleoperate (with camera view)
-│   ├── record.sh          # Record a dataset of demos
-│   ├── train.sh           # Train ACT (local, for small tests — use Colab for real runs)
-│   └── rollout.sh         # Run a trained policy on the robot
+│   ├── install.sh           # One-shot setup: deps + venv (+ --lelab)
+│   ├── find_ports.sh        # Find USB ports for the arms
+│   ├── calibrate.sh         # Calibrate an arm (follower | leader)
+│   ├── teleop.sh            # Teleoperate (with camera view)
+│   ├── record.sh            # Record a dataset of demos
+│   ├── merge_datasets.sh    # Merge several datasets into one on the Hub
+│   ├── train.sh             # Train ACT (local, for small tests — use Colab for real runs)
+│   └── rollout.sh           # Run a trained policy on the robot
 ├── docs/
 │   ├── data_collection_protocol.md   # READ BEFORE RECORDING ANY DATA
 │   └── lab_notebook.md               # Running log: every session, every training run
-└── notebooks/             # Colab training notebooks live here
+└── notebooks/
+    └── train_act_colab.ipynb   # ACT training on Colab's free GPU
 ```
 
 ## One-time setup (macOS)
 
-LeRobot requires **Python 3.12+** and **git-lfs**.
+LeRobot requires **Python 3.12+** and **git-lfs**. One command does everything —
+system deps, a `.venv`, and all Python dependencies from `requirements.txt`:
 
 ```bash
-# 1. Homebrew deps
-brew install python@3.12 git-lfs
-git lfs install
-
-# 2. Clone LeRobot (separate repo, lives next to this one)
-git clone https://github.com/huggingface/lerobot.git ~/lerobot
-cd ~/lerobot
-
-# 3. Virtual environment
-python3.12 -m venv .venv
+./scripts/install.sh            # add --lelab to also install the LeLab UI
 source .venv/bin/activate
-pip install --upgrade pip
-pip install -e ".[feetech]"
-
-# 4. Verify
-python -c "import lerobot; print('LeRobot OK')"
-
-# 5. Log in to Hugging Face (needed to push datasets/models)
-pip install -U "huggingface_hub[cli]"
-hf auth login
+hf auth login                   # paste a WRITE token
+cp configs/setup.env.example configs/setup.env   # then edit your ports
 ```
+
+<details>
+<summary>What that installs / doing it manually</summary>
+
+```bash
+brew install python@3.12 git-lfs && git lfs install
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt          # lerobot[feetech] + huggingface_hub[cli]
+```
+
+`requirements.txt` pulls the full LeRobot pipeline (`lerobot-find-port`,
+`calibrate`, `teleoperate`, `record`, `train`, `rollout`, `edit-dataset`) plus the
+ACT policy and OpenCV camera support.
+</details>
 
 ## Every time you work on this
 
 ```bash
-cd ~/lerobot && source .venv/bin/activate
-cd ~/autosort   # (or wherever you cloned this repo)
+source .venv/bin/activate
 ```
 
 ## First time on a new machine / new location
@@ -70,21 +80,41 @@ USB port names change when arms are re-plugged or you switch computers:
 
 Then edit `configs/setup.env` with your ports and camera indices.
 
-> **Arm IDs:** the `id` for each arm (e.g. `autosort_follower`) names its calibration
+> **Arm IDs:** the `id` for each arm (e.g. `my_follower`) names its calibration
 > file. Use the SAME ids everywhere on a given machine, or you'll trigger
 > recalibration. They're set once in `configs/setup.env`.
+
+## Calibrate (once per arm on a new machine)
+
+```bash
+./scripts/calibrate.sh follower
+./scripts/calibrate.sh leader
+```
 
 ## Usage
 
 ```bash
 ./scripts/teleop.sh                          # practice driving the arm
-./scripts/record.sh my_dataset_name 10      # record 10 episodes
-./scripts/train.sh my_dataset_name           # small local test run (slow on Mac)
-./scripts/rollout.sh path/to/policy          # deploy a trained policy
+./scripts/record.sh gear_v1 50               # record 50 episodes
+./scripts/record.sh gear_v1 50 "" resume     # add more episodes to an existing dataset
+./scripts/merge_datasets.sh gear_combined \
+    Henry-Wang0225/gear_v1 Henry-Wang0225/gear_v2   # merge datasets
+./scripts/train.sh gear_v1                    # small local test run (slow on Mac)
+./scripts/rollout.sh Henry-Wang0225/act_v1    # deploy a trained policy
 ```
 
-**Real training runs happen on Google Colab** (free T4 GPU) — see `notebooks/`.
-LeRobot has an official ACT training notebook; ours with our settings goes in that folder.
+## Where training actually happens
+
+Local `train.sh` on a Mac (MPS) is only for sanity checks — it's slow. Do real
+runs one of two ways:
+
+- **LeLab** — a browser UI over LeRobot for recording/training/eval. Install and run:
+  ```bash
+  uv tool install git+https://github.com/huggingface/leLab.git && lelab
+  ```
+- **Google Colab** (free T4 GPU) — see `notebooks/`. Start from LeRobot's official
+  ACT training notebook, point it at `<HF_USER>/<dataset_name>`, push the policy
+  back to the Hub, then `./scripts/rollout.sh <HF_USER>/<policy_name>` locally.
 
 ## Rules
 
